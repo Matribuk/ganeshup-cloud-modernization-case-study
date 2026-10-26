@@ -12,3 +12,8 @@ Initially engineered for rapid time-to-market, the v1.0 production backend ran a
 
 ---
 
+## 2. Architectural Audit: "As-Is" Bottlenecks vs. "To-Be" AWS Target
+
+| Bottleneck Identified ("As-Is") | Operational & Business Risk | AWS Modernization Solution ("To-Be") |
+| :--- | :--- | :--- |
+| **1. Stateful Local Disk Storage**<br>Course media (images/ & audio/) written to container a container env path (./uploads) | **Blocks Horizontal Scaling:** Running more than 1 API replica will causes 404 Not Found on GET /api/.../:token when requests hit a different container. | **Stateless Compute + Amazon S3** Offload media storage to **Amazon S3** with **S3 Lifecycle Policies** for automatic experiation of old files. |
