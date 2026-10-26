@@ -14,7 +14,7 @@ Initially engineered for rapid time-to-market, the v1.0 production backend ran a
 
 ## 2. Architectural Audit: "As-Is" Bottlenecks vs. "To-Be" AWS Target
 
-> **Bottleneck identified by Stateful, CPU-RAM-Bandwidth, BDD-Lifecycle, Administravie Process**
+> **Bottleneck identified by Stateful, CPU-RAM-Bandwidth, BDD-Lifecycle, Administrative Process**
 
 | Bottleneck Identified ("As-Is") | Operational & Business Risk | AWS Modernization Solution ("To-Be") |
 | :--- | :--- | :--- |
