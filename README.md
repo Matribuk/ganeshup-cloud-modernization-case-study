@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary & Engagement Context
 
-**Ganesh'up** is an offline-first Flutter learning application backed by a **Node.js 20 / Typescript** REST API, **Prisma ORM**, **PostgreSQL 15**, and **Redis 7**.
+**Ganesh'up** is an offline-first Flutter learning application backed by a **Node.js 20 / Typescript** REST API, **Prisma ORM**, **PostgreSQL 15**
 
 Initially engineered for rapid time-to-market, the v1.0 production backend ran as a single-node `docker-compose` stack deployed via an atomic one-minute Bash script (`pg_dump` 3-2-1 backup, SHA-tagged build, container restart, and `/api/health` check). While effective for early adoption, an architectural audit conducted against the **AWS Well-Architected Framework** identified four structural bottlenecks preventing horizontal scale and zero-downtime operations.
 
@@ -18,7 +18,47 @@ Initially engineered for rapid time-to-market, the v1.0 production backend ran a
 
 | Bottleneck Identified ("As-Is") | Operational & Business Risk | AWS Modernization Solution ("To-Be") |
 | :--- | :--- | :--- |
-| **1. Stateful Local Disk Storage**<br>Course media (images/ & audio/) written to container a container env path (./uploads) | **Blocks Horizontal Scaling:** Running more than 1 API replica will causes 404 Not Found on GET /api/.../:token when requests hit a different container. | **Stateless Compute + Amazon S3** Offload media storage to **Amazon S3** with **S3 Lifecycle Policies** for automatic experiation of old files. |
+| **1. Stateful Local Disk Storage**<br>Course media (images/ & audio/) written to container a container env path (./uploads) | **Blocks Horizontal Scaling:** Running more than 1 API replica will causes 404 Not Found on GET /api/.../:token when requests hit a different container. | **Stateless Compute + Amazon S3** Offload media storage to **Amazon S3** with **S3 Lifecycle Policies** for automatic expiration of old files. |
 | **2. Heavy 50MB Base64 Payloads**<br>POST /api/.../share ingests and decode up to 50MB of Base64 JSON in-memory. | **Event-Loop Starvation & Out of Memory:** Base64 decoding spikes Node.js memory and block concurrent /api/auth requests. | **S3 Predesigned URLs & Async Workers:** Decouple binary uploads from JSON metadata (shared_courses table) and process media asynchronously via **SQS + Lambda.** |
 | **3. Single-Node Deployment & Prisma Migrations** <br>Atomic restart script + manual npx prisma migrate deploy. | **Deployment Downtime:** Brief connection drops during container restarts interrupt active mobile sync queues. | **Kubernetes (k3d/EKS) RollingUpdate:** 3 stateless replicas (maxUnavailable: 0) gated by /api/health on port 3000 + K8s InitContainer for Prisma migrations. |
 | **4. External Cron Calling HTTP endpoint**<br>Periodic cron hitting GET /api/.../cleanup + plaintext secrets. | **Security & Reliability Risk:** Admin maintenance logic exposed on API router; credentials stored on host disk. | **EventBridge Scheduler + AWS Secrets Manager:** Serverless sheduled cleanup task and centralized secrets injection via **Terraform.** |
+
+---
+
+## 3. Target Architecture ("To-Be" C4 Container View)
+
+```mermaid
+flowchart LR
+    classDef client fill:#F17645,stroke:#AF531E,color:white
+    classDef k8s fill:#10b981,stroke:#047857,color:white
+    classDef aws fill:#f59e0b,stroke:#b45309,color:white
+    classDef db fill:#ef4444,stroke:#991b1b,color:white
+
+    Flutter["📱 Ganesha App<br/>Flutter - Offline-First"]:::client
+
+    subgraph K8s["🐳 Kubernetes Cluster"]
+        direction TB
+        Ingress["⚖️ Ingress / ALB"]:::k8s
+        Init["🔄 Init Job<br/>Prisma Migrate"]:::k8s
+        API["🚀 API Pool<br/>3 replicas - Node 20"]:::k8s
+    end
+
+    subgraph AWS["☁️ AWS (LocalStack)"]
+        direction TB
+        SM["🔐 Secrets Manager"]:::aws
+        S3["🪣 S3 Bucket<br/>Media + Presigned URLs"]:::aws
+        EB["⏰ EventBridge"]:::aws
+        Lambda["λ Lambda Worker<br/>Cleanup"]:::aws
+        RDS[("PostgreSQL 15")]:::db
+    end
+
+    Flutter -->|"HTTPS REST"| Ingress
+    Flutter -.->|"Presigned URLs"| S3
+    Ingress --> API
+    Init -->|"Schema"| RDS
+    API -->|"Read secrets"| SM
+    API -->|"Prisma ORM"| RDS
+    API -->|"Generate URLs"| S3
+    EB -->|"Nightly"| Lambda
+    Lambda -->|"Purge tokens"| RDS
+```
