@@ -1,0 +1,24 @@
+{
+  "name": "ganeshup-mock-api",
+  "version": "1.0.0",
+  "description": "Stateless mock API of Ganeshup",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts",
+    "dev:as-is": "ts-node src/server.as-is.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.11.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.0.0"
+  },
+  "author": "Antonin Leprest",
+  "license": "MIT"
+}

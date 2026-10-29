@@ -25,6 +25,20 @@ Initially engineered for rapid time-to-market, the v1.0 production backend ran a
 | **5. Zombie Redis & In-Memory Rate-Limiting**<br>Idle redis:7-alpine container running unused while express-rate-limit uses local Node.js RAM. | **Cloud Waste & Security Bypass:** Lift-and-shift would bill for an unused ElastiCache cluster; local RAM rate-limiting (5 req/15min) is multiplied by the number of API replicas. | **Resource Decommissioning (FinOps) & Edge Rate-Limiting:** Decommission Redis completely and enforce global rate-limiting at the **Kubernetes Ingress / ALB WAF** layer. |
 | **6. In-Place Production Builds & Manual TLS/Nginx**<br>deploy.sh compiles Docker on the production VPS (37GB cache bloat), runs --force-recreate nginx, and manages Let's Encrypt via sudo hooks. | **CPU Theft, Disk Saturation & TLS Drops:** Building images on the host steals CPU from live traffic and risks disk exhaustion; recreating Nginx drops active TLS connections. | **CI-Built Immutable Images + Managed Edge:** Build SHA-tagged images in **GitHub Actions** (pushed to ECR) and offload TLS termination/renewal to **AWS ACM + Ingress**. |
 
+### 2.1 Empirical Baseline: "As-Is" Load Test & Telemetry
+
+To quantify the operational impact of **Bottlenecks**, we benchmark via a load test mock-api/benchmark.as-is.sh
+
+| Test Scenario (~15 MB Base64 Payload) | Concurrency | Total Latency | Idle RAM (RSS) | Peak RAM (RSS) | RAM Multiplier | Peak CPU (1 Core) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Single User Baseline** | 1 request | **113 ms** | ~17.5 MB | **~260 MB** | **15x** | 59.0% |
+| **Concurrent Burst** | 10 requests | **704 ms** | ~8.0 MB | **~735 MB** | **91x** | 59.8% |
+
+**Key Telemetry Findings:**
+* Immediate **OOMKilled** Risk (Bottleneck #2): 10 concurrent uploads spike Node.js Resident Set Size (RSS) from **8 MB to 735 MB** as V8 allocates entire JSON strings and decoded binary buffers in memory simultaneously. On standard 512 MB / 1 GB container limits, this triggers a Linux Kernel Out-Of-Memory kill
+* **Event Loop Starvation:** Because JSON.parse(), Buffer.from(), and fs.writeFileSync() execute synchronously on the single Node.js main thread requests are serialized. Total process time degrades by **>6x** (113 ms to 704 ms), blocking lightweight endpoints (/api/health, /api/auth) during file ingestion
+* **Stateful Disk Pollution** (Bottleneck #1): A single 10-request burst wrote **150 binary files** directly to the local container path, which confirm that local filesystem persistence prevents horizontal scaling across multiple Kubernetes pods
+
 ---
 
 ## 3. Target Architecture ("To-Be" C4 Container View)
