@@ -16,6 +16,11 @@ terraform {
 provider "aws" {
   region = "ca-central-1"
 }
+variable "db_host" {
+  description = "PostgreSQL hostname injected into DATABASE_URL"
+  type        = string
+  default     = "localhost"
+}
 #0==========================================================================0
 
 #1==========================================================================1
@@ -59,7 +64,7 @@ provider "aws" {
   resource "aws_secretsmanager_secret_version" "backend_env_val" {
     secret_id = aws_secretsmanager_secret.backend_env.id
     secret_string = jsonencode({
-      DATABASE_URL   = "postgresql://ganeshup_user:local_rds_password@host.k3d.internal:5432/ganeshup_db"
+      DATABASE_URL   = "postgresql://ganeshup_user:local_rds_password@${var.db_host}:5432/ganeshup_db"
       JWT_SECRET     = "kms-managed-jwt-secret"
       API_KEY        = "kms-managed-api-key"
       ADMIN_TOKEN    = "kms-managed-admin-token"

@@ -39,6 +39,23 @@ To quantify the operational impact of **Bottlenecks**, we benchmark via a load t
 * **Event Loop Starvation:** Because JSON.parse(), Buffer.from(), and fs.writeFileSync() execute synchronously on the single Node.js main thread requests are serialized. Total process time degrades by **>6x** (113 ms to 704 ms), blocking lightweight endpoints (/api/health, /api/auth) during file ingestion
 * **Stateful Disk Pollution** (Bottleneck #1): A single 10-request burst wrote **150 binary files** directly to the local container path, which confirm that local filesystem persistence prevents horizontal scaling across multiple Kubernetes pods
 
+### 2.2 Post-Modernization Validation: "To-Be" Load Test & Telemetry
+
+To validate each **AWS Modernization Solution**, we replay the identical workload (15 media items per request) against the stateless stack via mock-api/benchmark.to-be.sh
+
+| Test Scenario (~0.6 KB Metadata Payload) | Concurrency | Total Latency | Idle RAM (RSS) | Peak RAM (RSS) | RSS Growth | Peak CPU (1 Core) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Single User Baseline** | 1 request | **31 ms** | ~295 MB | **~295 MB** | **+0 MB** | 5.1% |
+| **Concurrent Burst** | 10 requests | **85 ms** | ~350 MB | **~362 MB** | **+12 MB** | 62.2% |
+
+**Key Telemetry Findings:**
+* **OOMKilled Risk Eliminated** (Bottleneck #2): the 10-request burst peaks at **362 MB instead of 735 MB**, and more decisively grows by only **+12 MB** above its own idle baseline. The API ingests 0.6 KB of JSON metadata and returns 15 S3 Presigned URLs, so V8 never allocates entire JSON strings nor decoded binary buffers, and the 512 MB container limit stops being a function of concurrency
+* **Event Loop Preserved:** Total process time drops from **704 ms to 85 ms** on the same burst, because JSON.parse() now handles a 0.6 KB string and getSignedUrl() is a pure in-memory HMAC-SHA256 signature with no synchronous fs.writeFileSync() on the main thread. Lightweight endpoints (/api/health, /api/auth) stay responsive during ingestion
+* **Stateless Compute Confirmed** (Bottleneck #1): the same 10-request burst wrote **0 binary files** to the local container path against 150 previously, which unblocks the 3-replica RollingUpdate since no pod retains media that a sibling pod cannot serve
+* **Resident Baseline Trade-Off:** the three AWS SDK clients raise the idle footprint from ~258 MB to ~350 MB, a constant **+92 MB per replica**. This is a sizing cost and not a scaling one, as it does not grow with traffic where the As-Is cost did
+* **Peak CPU Trade-Off** (Bottleneck #5): signing 150 Presigned URLs holds peak CPU at **62.2%**, marginally above the As-Is 59.8%. The burst is 8x shorter so cumulative CPU time collapses, but a single core still saturates, which confirms that Edge Rate-Limiting at the Kubernetes Ingress remains required and cannot be relegated to in-process Node.js RAM
+
+
 ---
 
 ## 3. Target Architecture ("To-Be" C4 Container View)
