@@ -4,6 +4,7 @@
 URL="http://localhost:3000/api/courses/share"
 PAYLOAD_FILE="payload_heavy.json"
 CONCURRENCY=${1:-10}
+IMAGE_COUNT=15
 
 echo "<==========================================================="
 echo "📊 AS-IS BENCHMARK: Load Test & RAM/CPU Impact"
@@ -13,7 +14,7 @@ echo "[*] Generation of a heavy test payload (simulating images/audio)..."
 node -e '
 const fs = require("fs");
 const chunk = "A".repeat(1024 * 1024); // 1 Mo of fake data in base64
-const images = Array.from({ length: 15 }, (_, i) => ({
+const images = Array.from({ length: '${IMAGE_COUNT}' }, (_, i) => ({
   index: i,
   base64Data: Buffer.from(chunk).toString("base64"),
   filename: `image_${i}.jpg`
@@ -28,7 +29,7 @@ fs.writeFileSync("'${PAYLOAD_FILE}'", JSON.stringify(payload));
 console.log("[+] Payload generated : ~15 Mo on disk.");
 '
 
-NODE_PID=$(pgrep -f "ts-node src/server.as-is.ts")
+NODE_PID=$(pgrep -f "[.]bin/ts-node src/server.as-is.ts")
 
 if [ -z "$NODE_PID" ]; then
   echo "[!] Error : The legacy mock-api server does not seem to be running (run 'npm run dev:as-is' in another terminal)."
